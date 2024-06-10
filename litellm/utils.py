@@ -1316,32 +1316,41 @@ class Logging:
 
             verbose_logger.debug(f"PRE-API-CALL ADDITIONAL ARGS: {additional_args}")
 
-            curl_command = "\n\nPOST Request Sent from LiteLLM:\n"
-            curl_command += "curl -X POST \\\n"
-            curl_command += f"{api_base} \\\n"
-            curl_command += (
-                f"{formatted_headers} \\\n" if formatted_headers.strip() != "" else ""
-            )
-            curl_command += f"-d '{str(data)}'\n"
-            if additional_args.get("request_str", None) is not None:
-                # print the sagemaker / bedrock client request
-                curl_command = "\nRequest Sent from LiteLLM:\n"
-                curl_command += additional_args.get("request_str", None)
-            elif api_base == "":
-                curl_command = self.model_call_details
+            if ((verbose_logger.level == logging.NOTSET and litellm.set_verbose == True)
+                or verbose_logger.isEnabledFor(logging.DEBUG)
+                or litellm.json_logs):
+                if request_str := additional_args.get("request_str", None):
+                    # print the sagemaker / bedrock client request
+                    curl_command = "\nRequest Sent from LiteLLM:\n" + request_str
+                elif api_base == "":
+                    curl_command = self.model_call_details
+                else:
+                    formatted_headers_str = "{formatted_headers} \\\n".format(formatted_headers=formatted_headers) if formatted_headers.strip() != "" else ""
+                    try:
+                        data_str = json.dumps(data, default=str)
+                    except:
+                        data_str = str(data)
 
-            # only print verbose if verbose logger is not set
-            if verbose_logger.level == 0:
-                # this means verbose logger was not switched on - user is in litellm.set_verbose=True
-                print_verbose(f"\033[92m{curl_command}\033[0m\n")
+                    curl_command = (
+                    "\n\nPOST Request Sent from LiteLLM:\n"
+                    "curl -X POST \\\n"
+                    "{api_base} \\\n"
+                    "{formatted_headers_str}"
+                    "-d '{data_str}'\n"
+                    ).format(api_base=api_base, formatted_headers_str=formatted_headers_str, data_str=data_str.replace("'", "'\"'\"'"))
 
-            if litellm.json_logs:
-                verbose_logger.debug(
-                    "POST Request Sent from LiteLLM",
-                    extra={"api_base": {api_base}, **masked_headers},
-                )
-            else:
-                verbose_logger.debug(f"\033[92m{curl_command}\033[0m\n")
+                # only print verbose if verbose logger is not set
+                if verbose_logger.level == logging.NOTSET:
+                    # this means verbose logger was not switched on - user is in litellm.set_verbose=True
+                    print_verbose(f"\033[92m{curl_command}\033[0m\n")
+
+                if litellm.json_logs:
+                    verbose_logger.debug(
+                        "POST Request Sent from LiteLLM",
+                        extra={"api_base": {api_base}, **masked_headers},
+                    )
+                else:
+                    verbose_logger.debug(f"\033[92m{curl_command}\033[0m\n")
             # log raw request to provider (like LangFuse)
             try:
                 # [Non-blocking Extra Debug Information in metadata]
